@@ -36,3 +36,15 @@
     transform: rotate(360deg);
   }
 }
+
+.nft-card-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px; /* Adjust the gap between cards */
+  padding: 16px;
+  justify-content: center; /* Center horizontally */
+  align-items: center; /* Center vertically if the container height is constrained */
+  /* Optionally set a max-width to constrain the container */
+  max-width: 1200px;
+  margin: 0 auto; /* Center the flex container itself horizontally */
+}
