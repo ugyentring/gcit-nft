@@ -1,5 +1,5 @@
 import "./App.css";
-import { ethers } from "ethers";
+import Web3 from "web3";
 import { useEffect, useLayoutEffect, useState } from "react";
 import Title from "./ui/Title";
 import NFTForm from "./ui/NFTForm";
@@ -8,12 +8,10 @@ import LoadingSpinner from "./ui/LoadingSpinner";
 import axios from "axios";
 
 const gcitNFTABI = require("./contracts/GcitNFT.json");
-//const gcitNFTContractAddress = "0xC421b1EE67b0dCc07dD9aFb53dE47772EA42e5a6";
-const gcitNFTContractAddress = "0x83d0e9468eD4F1e79C541e835F6B18717d993E39";
+const gcitNFTContractAddress = "0x0D12842eB6A5aA19b2BF002889c0529f3F21B0C7";
 
 function App() {
-  const [provider, setProvider] = useState(null);
-  const [signer, setSingner] = useState(null);
+  const [web3, setWeb3] = useState(null);
   const [gcitNFTAPI, setGCITNFTAPI] = useState(null);
   const [gcitNFTName, setGCITNFTName] = useState("");
   const [gcitNFTSymbol, setGCITNFTSymbol] = useState("");
@@ -22,73 +20,78 @@ function App() {
 
   useEffect(() => {
     const connectWallet = async () => {
-      //Check for the metamask wallet
       if (window.ethereum == null) {
         console.log("Metamask not found");
-        setProvider(ethers.getDefaultProvider());
       } else {
-        const providerInstance = new ethers.BrowserProvider(window.ethereum);
-        setProvider(providerInstance);
-        //get the singer object so that you can perform the write operations
-        providerInstance
-          .getSigner()
-          .then((signerInstance) => {
-            setSingner(signerInstance);
-            //Let connect with the smart contract
-
-            setGCITNFTAPI(
-              new ethers.Contract(
-                gcitNFTContractAddress,
-                gcitNFTABI.abi,
-                signerInstance
-              )
-            );
-          })
-          .catch((error) => console.log(error));
+        const web3Instance = new Web3(window.ethereum);
+        setWeb3(web3Instance);
+        try {
+          await window.ethereum.request({ method: "eth_requestAccounts" });
+          const contract = new web3Instance.eth.Contract(
+            gcitNFTABI.abi,
+            gcitNFTContractAddress
+          );
+          setGCITNFTAPI(contract);
+        } catch (error) {
+          console.log("Error connecting to Metamask or contract:", error);
+        }
       }
     };
     connectWallet();
   }, []);
 
-  //Fetch the GCIT NFT name and symbol
   useEffect(() => {
     const fetchGCITNFTNameSymbol = async () => {
       if (gcitNFTAPI) {
-        setGCITNFTName(await gcitNFTAPI.name());
-        setGCITNFTSymbol(await gcitNFTAPI.symbol());
+        try {
+          const name = await gcitNFTAPI.methods.name().call();
+          const symbol = await gcitNFTAPI.methods.symbol().call();
+          setGCITNFTName(name);
+          setGCITNFTSymbol(symbol);
+        } catch (error) {
+          console.log("Error fetching NFT name or symbol:", error);
+        }
       }
     };
     fetchGCITNFTNameSymbol();
   }, [gcitNFTAPI]);
 
   useLayoutEffect(() => {
-    //Set the website title
     document.title = gcitNFTSymbol + " " + document.title;
   }, [gcitNFTName, gcitNFTSymbol]);
 
-  //Fetch Individual NFT
   useEffect(() => {
     const fetchGCITNFT = async () => {
       let tokenId = 0;
       const nft_list = [];
       if (gcitNFTAPI) {
-        while (true) {
-          try {
-            let tx = await gcitNFTAPI.tokenURI(tokenId);
-            let nft_data = await axios.get(tx);
-            console.log(nft_data.data);
-            nft_list.push(nft_data.data);
-            tokenId += 1;
-          } catch (error) {
-            // console.log(error);
-            break;
+        try {
+          while (true) {
+            try {
+              await gcitNFTAPI.methods.ownerOf(tokenId).call();
+              const tokenURI = await gcitNFTAPI.methods
+                .tokenURI(tokenId)
+                .call();
+              const nft_data = await axios.get(tokenURI);
+              console.log(nft_data.data);
+              nft_list.push(nft_data.data);
+              tokenId += 1;
+            } catch (innerError) {
+              console.log(
+                "No more tokens or failed to fetch token:",
+                innerError
+              );
+              break;
+            }
           }
+        } catch (error) {
+          console.log("Error fetching NFT or token does not exist:", error);
         }
         setGCITNFTList(nft_list);
       }
     };
     fetchGCITNFT();
-  }, [gcitNFTAPI, gcitNFTList]);
+  }, [gcitNFTAPI]);
 
   console.log(gcitNFTList.length);
 
@@ -106,9 +109,9 @@ function App() {
         <LoadingSpinner />
       ) : (
         <div className="nft-card-list">
-          {gcitNFTList.map((item) => (
+          {gcitNFTList.map((item, index) => (
             <NFTCard
-              key={item.name}
+              key={index}
               name={item.name}
               description={item.description}
               image={item.image}
